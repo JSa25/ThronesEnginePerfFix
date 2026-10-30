@@ -10,6 +10,11 @@ Download the ready-made DLL:
 
 Created with the help of AI (Claude by Anthropic). Tested in game by JGdaCaesar.
 
+It also carries the game side of the separate DLSS add-on "Upscaling and Framegen for Thrones of Britannia" (NVIDIA
+DLSS Super Resolution and Frame Generation): it only starts when the add-on's `FrameBridge` folder is in the game
+folder, otherwise none of it runs. The add-on's 64-bit helper is its own repository:
+https://github.com/JSa25/TotalWarUpscalingFramegen
+
 ## What each file does
 
 | File | Fix |
@@ -27,7 +32,12 @@ Created with the help of AI (Claude by Anthropic). Tested in game by JGdaCaesar.
 | `attrcache.c` | Loading and menus: cache of missing loose-file folders behind the game's `GetFileAttributesW` and read-only `CreateFileW` calls. Every folder above a cached name is watched; any change clears the cache. Answers and last-error values are the same as Windows' |
 | `texfix.c` | Battle loading: the DXT1 compressor for unit imposters redone with SSE2, byte-identical output |
 | `uikeep.c` | Menus: the deletion step of the UI picture queue keeps a picture loaded instead of deleting it and remembers its name, up to 1,024 |
-| `update.c` | Self-update from the Steam Workshop copy (compares a version marker in the file; never downgrades, no network) |
+| `update.c` | Self-update from the Steam Workshop copy (compares a version marker in the file; never downgrades, no network). Also updates the DLSS add-on: from the one Workshop item its `install.bat` recorded (`FrameBridge\source.txt`), only when that item's `FrameBridge\version.txt` is higher; `settings.txt` and logs are kept |
+| `bridgeprobe.c` | DLSS add-on, game side (only with `<game>\FrameBridge\helper64.exe`): finds the frame without the HUD, the camera and the scene depth in the game's Direct3D 11 calls, moves the game's swapchain to a hidden window, jitters the viewport for DLSS, reads `FrameBridge\settings.txt` |
+| `fgbridge.c` | Hands each frame (picture, depth, camera motion) to the 64-bit helper through shared textures and fences, and paces the game to it; stops the helper and falls back to the game's own frames if it stops answering |
+| `fgb_proto.h` | The shared-memory layout and fences between `fgbridge.c` and the helper (the same file in the helper's repository) |
+| `fgpanel.c` | The F11 settings panel drawn over the frame |
+| `r2motion.c`, `r2motionvs.h` | Per-object motion vectors for moving soldiers and horses: the animated models drawn again on the GPU with the game's own skinning, matched to the previous frame by position |
 | `diag.c` | Diagnostics in `tobfix.log`: mod version, game build and whether it is supported, system, settings, other hook DLLs, and crash records with a plain line saying whose code it was (a vectored exception handler that only logs) |
 | `logtrim.c` | Keeps `tobfix.log` under about 1 MB |
 | `builds.h`, `version.h`, `dinput8.def` | Known game builds, the mod version, the exports a `dinput8.dll` must have |
@@ -64,7 +74,10 @@ The tests run the game's own code next to the replacements on millions of inputs
 identical. `lateload_test` loads the built DLL before the game DLL, as an overlay can, and checks every fix still
 installs from Windows' load notification; `diag_test` checks the crash records on deliberate faults; `fileio_test` and
 `attrcache_test` compare against plain Windows calls on a temporary folder tree while it changes; `uikeep_test` runs
-the menu fix against a stand-in for the game's picture table. They read your copy of the game's `empire.retail.dll`
+the menu fix against a stand-in for the game's picture table; `selfupd_test` checks the update rules (the DLL and the
+DLSS add-on) on throwaway files; `bridgelive_test` runs the DLSS add-on's game side against a stand-in game on your
+graphics card (`addon`: its settings) and `r2motion_test` the per-object motion vectors against values worked out on
+the CPU. They read your copy of the game's `empire.retail.dll`
 (it is not included here):
 
 ```

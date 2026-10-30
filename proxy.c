@@ -27,6 +27,7 @@ int install_texfix(HMODULE m, int verify, log_fn log);                  // texfi
 int install_uikeep(HMODULE m, log_fn log);                              // uikeep.c
 void diag_startup(HMODULE empire, const wchar_t *log_path, log_fn log);  // diag.c
 void update_check(HMODULE self, log_fn log);                            // update.c
+int install_bridgeprobe(HMODULE m, const wchar_t *dir, log_fn log);     // bridgeprobe.c (the DLSS add-on)
 
 static HMODULE g_self;
 static wchar_t g_log_path[MAX_PATH];
@@ -72,9 +73,15 @@ static FARPROC real_proc(const char *name) {
     return GetProcAddress(g_real, name);
 }
 
+void (*g_dev_di8_created)(void *di);   // the DLSS add-on's panel filters the game's mouse while open (fgpanel.c)
 HRESULT WINAPI stub_DirectInput8Create(HINSTANCE h, DWORD v, REFIID r, LPVOID *o, LPUNKNOWN u) {
     typedef HRESULT(WINAPI * fn)(HINSTANCE, DWORD, REFIID, LPVOID *, LPUNKNOWN);
     fn f = (fn)real_proc("DirectInput8Create");
+    if (f && g_dev_di8_created) {
+        HRESULT hr = f(h, v, r, o, u);
+        if (SUCCEEDED(hr) && o && *o) g_dev_di8_created(*o);
+        return hr;
+    }
     return f ? f(h, v, r, o, u) : E_FAIL;
 }
 HRESULT WINAPI stub_DllCanUnloadNow(void) {
@@ -218,6 +225,28 @@ static void install_all(HMODULE m) {
     } else
         st[S_MENUS] = install_uikeep(m, wlog) > 0;
     log_status(st);
+    // the DLSS add-on (Upscaling and Framegen for Thrones of Britannia): <game>\FrameBridge\ with the 64-bit helper and
+    // NVIDIA's DLLs; without it, or with addon=off in its settings.txt, nothing is installed. Dev builds: also
+    // bridgeprobe.txt (the bridge capture probe, fgbridge_on.txt; dlss/DLSS_LOG.md)
+    int addon = PRESENT(L"FrameBridge\\helper64.exe");
+    if (addon) {
+        char text[1024] = {0};
+        FILE *sf = PRESENT(L"FrameBridge\\settings.txt") ? _wfopen(f, L"r") : NULL;
+        if (sf) { fread(text, 1, sizeof text - 1, sf); fclose(sf); }
+        if (strstr(text, "\naddon=off") || !strncmp(text, "addon=off", 9)) {
+            wlog("DLSS add-on found but switched off (addon=off in FrameBridge\\settings.txt) - the game runs with the performance fix only");
+            addon = 0;
+        }
+    }
+#ifdef PROFILING
+    if (PRESENT(L"bridgeprobe.txt")) addon = 1;
+#endif
+    if (addon) {
+        wchar_t dir[MAX_PATH];
+        wcscpy(dir, f);
+        dir[name - f - 1] = 0;
+        install_bridgeprobe(m, dir, wlog);
+    }
 }
 
 // Something else in the process (an overlay, another hook DLL) can load dinput8.dll before the game loads
@@ -248,7 +277,9 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID r) {
     g_self = h;
     DWORD n = GetModuleFileNameW(h, g_log_path, MAX_PATH);
     wchar_t *sl = wcsrchr(g_log_path, L'\\');
-    if (n == 0 || n >= MAX_PATH || !sl || sl - g_log_path > MAX_PATH - 20) {  // no log path: do nothing
+    // room after the folder for the longest file name used (install_all's switch files and FrameBridge\settings.txt, up
+    // to 24 characters + NUL)
+    if (n == 0 || n >= MAX_PATH || !sl || sl - g_log_path > MAX_PATH - 32) {  // no log path: do nothing
         DisableThreadLibraryCalls(h);
         return TRUE;
     }

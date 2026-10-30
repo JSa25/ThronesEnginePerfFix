@@ -13,10 +13,12 @@ if not exist "%MIMALLOC%\src\static.c" (
 if not exist build mkdir build
 set "LIBS=-lkernel32 -lwinmm -ladvapi32 -lpsapi -lbcrypt"
 set "SRC=proxy.c diag.c update.c logtrim.c heapfix.c pool.c sortfix.c frame.c campfix.c x87fix.c memfast.c loopfetch.c fileio.c attrcache.c texfix.c uikeep.c"
+rem the DLSS add-on's frame bridge, started only by <game>\FrameBridge (RELEASE: no test-only code in the DLL)
+set "BRIDGE=bridgeprobe.c fgbridge.c fgpanel.c r2motion.c"
 
 "%CC%" -O2 -DNDEBUG -I"%MIMALLOC%\include" -c "%MIMALLOC%\src\static.c" -o build\mimalloc.o || exit /b 1
 rem --no-insert-timestamp keeps the build reproducible: the same compiler gives the same file
-"%CC%" -O2 -Wall -Wextra -I"%MIMALLOC%\include" -shared -s -static -Wl,--no-insert-timestamp -o build\dinput8.dll %SRC% build\mimalloc.o dinput8.def %LIBS% || exit /b 1
+"%CC%" -O2 -Wall -Wextra -DRELEASE -I"%MIMALLOC%\include" -shared -s -static -Wl,--no-insert-timestamp -o build\dinput8.dll %SRC% %BRIDGE% build\mimalloc.o dinput8.def %LIBS% -lgdi32 || exit /b 1
 echo built build\dinput8.dll
 
 if /i not "%~1"=="test" exit /b 0
@@ -40,6 +42,14 @@ for %%T in (diag selfupd fileio attrcache uikeep) do (
 "%CC%" -O2 -Wall -static -o build\logtrim_test.exe tests\logtrim_test.c logtrim.c %LIBS% || exit /b 1
 echo == logtrim
 build\logtrim_test.exe || (echo logtrim test FAILED & exit /b 1)
+rem the frame bridge (needs a D3D11 GPU): the glue with fgbridge.c stubbed, the add-on's settings, the motion pass
+"%CC%" -O2 -Wall -static -o build\bridgelive_test.exe tests\bridgelive_test.c r2motion.c || exit /b 1
+"%CC%" -O2 -Wall -static -o build\r2motion_test.exe tests\r2motion_test.c || exit /b 1
+echo == bridgelive
+build\bridgelive_test.exe || (echo bridgelive test FAILED & exit /b 1)
+build\bridgelive_test.exe addon || (echo bridgelive add-on test FAILED & exit /b 1)
+echo == r2motion
+build\r2motion_test.exe || (echo r2motion test FAILED & exit /b 1)
 echo == lateload
 build\lateload_test.exe "%~dp0build\dinput8.dll" "%~2" || (echo lateload test FAILED & exit /b 1)
 echo all tests passed

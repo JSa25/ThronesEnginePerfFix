@@ -155,6 +155,22 @@ The mod is free and always will be. Donations are optional:
 https://ko-fi.com/jgdacaesar60922
 
 
+DLSS add-on (separate download)
+-------------------------------
+Since 1.1 this DLL can run the separate add-on "Upscaling and Framegen for
+Thrones of Britannia": NVIDIA DLSS Super Resolution and DLSS Frame Generation
+on NVIDIA RTX graphics cards. It does nothing unless that add-on's FrameBridge
+folder is in the game folder (its install.bat puts it there). The add-on's own
+README has the details; the engine fix keeps it up to date from the add-on's
+Workshop item.
+
+
 Changelog
 ---------
+1.1 - runs the separate DLSS add-on "Upscaling and Framegen for Thrones of
+      Britannia" (does nothing without it) and copies the add-on's Workshop
+      updates in at game start. A very long game folder path can no longer
+      overflow the names of the switch files.
+      SHA-256 of dinput8.dll:
+      183b259926ef9b9df89342c033ba1ee93514f5cc53b2342ec497d4037afdd3e0
 1.0 - first release.
